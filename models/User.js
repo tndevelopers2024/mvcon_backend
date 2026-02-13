@@ -79,7 +79,7 @@ paymentInfo: {
   amount: Number,
   status: {
     type: String,
-    enum: ["pending", "paid", "failed"],
+    enum: ["pending", "paid", "failed" , "free"],
     default: "pending",
   },
 },

@@ -41,8 +41,9 @@ const io = new Server(httpServer, {
       'http://localhost:9002',
       'http://localhost:3000',
       'http://localhost:5173',
-      'https://convertscantocad.com',
-      'https://api.convertscantocad.com',
+      'https://www.mvcon.in',
+      'https://mvcon.in',
+      'https://mvcon.space'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true, // If using cookies/auth
@@ -71,8 +72,9 @@ const allowedOrigins = [
   'http://localhost:9002',
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://convertscantocad.com',
-  'https://api.convertscantocad.com',
+  'https://www.mvcon.in',
+  'https://mvcon.in',
+  'https://mvcon.space',   // ✅ backend domain
 ];
 
 app.use(

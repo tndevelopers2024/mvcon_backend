@@ -5,6 +5,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const ErrorResponse = require("../utils/errorResponse");
 const path = require("path");
 const fs = require("fs");
+const archiver = require("archiver");
 const sendEmail = require("../utils/sendEmail");
 
 // @desc Submit Abstract
@@ -48,7 +49,7 @@ exports.submitAbstract = asyncHandler(async (req, res, next) => {
   });
 
   // ✅ Send Email to Admin
-  const adminEmail = process.env.ADMIN_EMAIL || "tndevelopmentworks@gmail.com";
+  const adminEmail = process.env.ADMIN_EMAIL || "tndevelopmentworks@gmail.com" || "prasannakanthan@gmail.com";
 
   const message = `
     <div style="max-width:650px;margin:0 auto;padding:25px;
@@ -117,4 +118,60 @@ exports.updateAbstractStatus = asyncHandler(async (req, res, next) => {
   await abstract.save();
 
   res.status(200).json({ success: true, data: abstract });
+});
+
+// @desc Delete abstract (admin only)
+// @route DELETE /api/v1/abstracts/:id
+exports.deleteAbstract = asyncHandler(async (req, res, next) => {
+  const abstract = await Abstract.findById(req.params.id);
+
+  if (!abstract) {
+    return next(new ErrorResponse("Abstract not found", 404));
+  }
+
+  // Delete physical file
+  const relativePath = abstract.file.startsWith("/") ? abstract.file.slice(1) : abstract.file;
+  const filePath = path.join(__dirname, "..", relativePath);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+
+  await abstract.deleteOne();
+
+  res.status(200).json({ success: true, data: {} });
+});
+
+// @desc Download all abstracts as ZIP (admin only)
+// @route GET /api/v1/abstracts/download-all
+exports.downloadAllAbstracts = asyncHandler(async (req, res, next) => {
+  const abstracts = await Abstract.find();
+
+  if (abstracts.length === 0) {
+    return next(new ErrorResponse("No abstracts found to download", 404));
+  }
+
+  res.attachment("all_abstracts.zip");
+
+  const archive = archiver("zip", {
+    zlib: { level: 9 }, // Sets the compression level.
+  });
+
+  archive.on("error", (err) => {
+    throw err;
+  });
+
+  archive.pipe(res);
+
+  abstracts.forEach((abs) => {
+    const relativePath = abs.file.startsWith("/") ? abs.file.slice(1) : abs.file;
+    const filePath = path.join(__dirname, "..", relativePath);
+    if (fs.existsSync(filePath)) {
+      // Use name and register number for filename inside zip to make it distinct
+      const extension = path.extname(filePath);
+      const zipFileName = `${abs.name}_${abs.registerNo}${extension}`.replace(/[/\\?%*:|"<>]/g, '-');
+      archive.file(filePath, { name: zipFileName });
+    }
+  });
+
+  await archive.finalize();
 });

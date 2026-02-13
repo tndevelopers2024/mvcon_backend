@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const PDFDocument = require("pdfkit");
-const poppler = require("pdf-poppler");
+const { fromPath } = require("pdf2pic");
 
 async function generateCertificate(user) {
   return new Promise((resolve, reject) => {
@@ -26,27 +26,31 @@ async function generateCertificate(user) {
     doc.rect(0, 0, doc.page.width, doc.page.height).fill("#fdf6e3");
     doc.rect(20, 20, doc.page.width - 40, doc.page.height - 40).stroke("#333");
 
-    doc.fontSize(30).fillColor("#2c3e50").text("Certificate of Participation", {
-      align: "center",
-      underline: true,
-    });
+    doc
+      .fontSize(30)
+      .fillColor("#2c3e50")
+      .text("Certificate of Participation", { align: "center", underline: true });
 
     doc.moveDown(2);
-    doc.fontSize(22).fillColor("#000").text(`This is proudly presented to:`, {
-      align: "center",
-    });
+    doc
+      .fontSize(22)
+      .fillColor("#000")
+      .text(`This is proudly presented to:`, { align: "center" });
 
     doc.moveDown(1);
-    doc.fontSize(28).fillColor("#e74c3c").text(user.name, {
-      align: "center",
-      bold: true,
-    });
+    doc
+      .fontSize(28)
+      .fillColor("#e74c3c")
+      .text(user.name, { align: "center", bold: true });
 
     doc.moveDown(1.5);
-    doc.fontSize(18).fillColor("#000").text(
-      `For participating as ${user.designation} in ${user.city}, ${user.state}`,
-      { align: "center" }
-    );
+    doc
+      .fontSize(18)
+      .fillColor("#000")
+      .text(
+        `For participating as ${user.designation} in ${user.city}, ${user.state}`,
+        { align: "center" }
+      );
 
     doc.moveDown(3);
     doc.fontSize(14).text(`Date: ${new Date().toLocaleDateString()}`, 100, 450);
@@ -72,17 +76,18 @@ async function generateCertificate(user) {
 
     stream.on("finish", async () => {
       try {
-        let opts = {
+        // Convert to image using pdf2pic
+        const converter = fromPath(pdfPath, {
+          density: 150,
+          saveFilename: `${user._id}-certificate`,
+          savePath: certDir,
           format: "png",
-          out_dir: certDir,
-          out_prefix: user._id + "-certificate",
-          page: null,
-        };
+          width: 1200,
+          height: 900,
+        });
 
-        await poppler.convert(pdfPath, opts);
-
-        // ✅ Poppler always adds `-1.png` for the first page
-        const imagePath = `/uploads/certificates/${user._id}-certificate-1.png`;
+        const result = await converter(1); // convert first page only
+        const imagePath = `/uploads/certificates/${path.basename(result.path)}`;
 
         resolve({
           pdf: `/uploads/certificates/${fileName}`,

@@ -1,0 +1,9 @@
+node_modules/
+.env
+uploads/
+completed_files/
+.idx/
+.vscode/
+yarn.lock
+package-lock.json
+*.log

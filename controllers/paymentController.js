@@ -48,25 +48,35 @@ exports.verifyPayment = asyncHandler(async (req, res, next) => {
     amount,
   } = req.body;
 
-  // ✅ Verify signature
-  const expectedSignature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(razorpay_order_id + "|" + razorpay_payment_id)
-    .digest("hex");
+  /* ======================================================
+     ✅ VERIFY PAYMENT (ONLY IF PAID)
+  ====================================================== */
+  if (amount > 0) {
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(razorpay_order_id + "|" + razorpay_payment_id)
+      .digest("hex");
 
-  if (expectedSignature !== razorpay_signature) {
-    return next(new ErrorResponse("Payment verification failed", 400));
+    if (expectedSignature !== razorpay_signature) {
+      return next(new ErrorResponse("Payment verification failed", 400));
+    }
   }
 
-  // ✅ Generate unique Register Number
+  /* ======================================================
+     ✅ GENERATE REGISTER NUMBER
+  ====================================================== */
   const randomPart = Math.floor(1000000000 + Math.random() * 9000000000); // 10-digit
-  const regNum = `reg${Date.now()}${randomPart}`; // e.g., reg1698695056123123456789
+  const regNum = `reg${Date.now()}${randomPart}`;
 
-  // ✅ Pre-generate ObjectId
+  /* ======================================================
+     ✅ PRE-GENERATE USER ID
+  ====================================================== */
   const tempUserId = new mongoose.Types.ObjectId();
 
-  // ✅ QR Code
-  const qrContent = `REG:${regNum}|USER_ID:${tempUserId.toString()}`;
+  /* ======================================================
+     ✅ QR CODE GENERATION
+  ====================================================== */
+  const qrContent = `USER_ID:${tempUserId.toString()}`;
   const qrDir = path.join(__dirname, "../uploads/qrcodes/");
   fs.mkdirSync(qrDir, { recursive: true });
 
@@ -74,7 +84,9 @@ exports.verifyPayment = asyncHandler(async (req, res, next) => {
   const qrFilePath = path.join(qrDir, qrFileName);
   await QRCode.toFile(qrFilePath, qrContent);
 
-  // ✅ Save User
+  /* ======================================================
+     ✅ SAVE USER
+  ====================================================== */
   const user = await User.create({
     _id: tempUserId,
     ...userData,
@@ -83,93 +95,102 @@ exports.verifyPayment = asyncHandler(async (req, res, next) => {
     qrCodeImage: `/uploads/qrcodes/${qrFileName}`,
     isVerified: true,
     paymentInfo: {
-      orderId: razorpay_order_id,
-      paymentId: razorpay_payment_id,
-      signature: razorpay_signature,
+      orderId: amount === 0 ? "FREE_REGISTRATION" : razorpay_order_id,
+      paymentId: amount === 0 ? "FREE_PAYMENT" : razorpay_payment_id,
+      signature: amount === 0 ? "FREE_SIGNATURE" : razorpay_signature,
       amount,
-      status: "paid",
+      status: amount === 0 ? "free" : "paid",
     },
   });
 
-  // ✅ Send email
+  /* ======================================================
+     ✅ SEND EMAIL
+  ====================================================== */
   try {
-  const message = `
-    <div style="max-width:650px;margin:0 auto;padding:25px;
-                font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
-                background:#f9fafc;border-radius:12px;">
-      
-      <div style="text-align:center;padding:20px 0;">
-        <img src="https://www.mvcon.in/images/finalLogo.png" 
-             alt="MVCon Logo" 
-             style="max-width:120px;margin-bottom:15px;" />
-        <h2 style="color:#1f2937;margin:0;font-size:26px;">🎉 Registration Confirmed</h2>
-        <p style="color:#6b7280;margin:8px 0 0;font-size:15px;">
-          Hi <strong>${user.name}</strong>, welcome to <b>MVCon</b>!  
-        </p>
-      </div>
-
-      <div style="background:#ffffff;margin:25px auto;
-                  padding:25px;border-radius:12px;
-                  box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+    const message = `
+      <div style="max-width:650px;margin:0 auto;padding:25px;
+                  font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+                  background:#f9fafc;border-radius:12px;">
         
-        <h3 style="margin-top:0;color:#374151;font-size:20px;">
-          Your Registration Details
-        </h3>
-
-        <p style="font-size:16px;color:#374151;margin:8px 0;">
-          <strong>Register Number:</strong> ${user.registerNumber}
-        </p>
-        <p style="font-size:16px;color:#374151;margin:8px 0;">
-          <strong>Email:</strong> ${user.email}
-        </p>
-        <p style="font-size:16px;color:#374151;margin:8px 0;">
-          <strong>Password:</strong> ${userData.password}
-        </p>
-
-        <div style="text-align:center;margin:20px 0;">
-          <p style="margin:0 0 10px;font-size:15px;color:#6b7280;">
-            Show this QR code at the event
+        <div style="text-align:center;padding:20px 0;">
+          <img src="https://www.mvcon.in/images/finalLogo.png" 
+               alt="MVCon Logo" 
+               style="max-width:120px;margin-bottom:15px;" />
+          <h2 style="color:#1f2937;margin:0;font-size:26px;">🎉 Registration Confirmed</h2>
+          <p style="color:#6b7280;margin:8px 0 0;font-size:15px;">
+            Hi <strong>${user.name}</strong>, welcome to <b>MVCon2026</b>!
           </p>
-          <img src="cid:qrcodeimg" alt="QR Code" 
-               style="max-width:200px;border:8px solid #f3f4f6;border-radius:12px;" />
+        </div>
+
+        <div style="background:#ffffff;margin:25px auto;
+                    padding:25px;border-radius:12px;
+                    box-shadow:0 4px 12px rgba(0,0,0,0.08);">
+          
+          <h3 style="margin-top:0;color:#374151;font-size:20px;">
+            Your Registration Details
+          </h3>
+
+          <p style="font-size:16px;color:#374151;margin:8px 0;">
+            <strong>Register Number:</strong> ${user.registerNumber}
+          </p>
+          <p style="font-size:16px;color:#374151;margin:8px 0;">
+            <strong>Email:</strong> ${user.email}
+          </p>
+          <p style="font-size:16px;color:#374151;margin:8px 0;">
+            <strong>Password:</strong> ${userData.password}
+          </p>
+
+          <div style="text-align:center;margin:20px 0;">
+            <p style="margin:0 0 10px;font-size:15px;color:#6b7280;">
+              Show this QR code at the event
+            </p>
+            <img src="cid:qrcodeimg" alt="QR Code" 
+                 style="max-width:200px;border:8px solid #f3f4f6;border-radius:12px;" />
+          </div>
+        </div>
+
+        <div style="text-align:center;margin:30px 0;">
+          <a href="https://www.mvcon.in/login" 
+             style="display:inline-block;padding:12px 25px;
+                    background:#5d01f2;color:#ffffff;text-decoration:none;
+                    border-radius:8px;font-size:16px;font-weight:600;">
+            Login to Your Account
+          </a>
+        </div>
+
+        <div style="text-align:center;color:#9ca3af;font-size:12px;margin-top:20px;">
+          <p style="margin:5px 0;">If you did not register, please ignore this email.</p>
+          <p style="margin:5px 0;">&copy; ${new Date().getFullYear()} MVCon. All rights reserved.</p>
         </div>
       </div>
+    `;
 
-      <div style="text-align:center;margin:30px 0;">
-        <a href="${process.env.FRONTEND_URL}/login" 
-           style="display:inline-block;padding:12px 25px;
-                  background:#5d01f2;color:#ffffff;text-decoration:none;
-                  border-radius:8px;font-size:16px;font-weight:600;">
-          Login to Your Account
-        </a>
-      </div>
+    await sendEmail({
+      email: user.email,
+      subject: "🎫 Your MVCon Registration is Confirmed",
+      message,
+      attachments: [
+        {
+          filename: "qrcode.png",
+          path: qrFilePath,
+          cid: "qrcodeimg",
+        },
+        {
+          filename: "MVCon-Pass.png",
+          path: qrFilePath,
+          contentType: "image/png",
+        },
+      ],
+    });
 
-      <div style="text-align:center;color:#9ca3af;font-size:12px;margin-top:20px;">
-        <p style="margin:5px 0;">If you did not register, please ignore this email.</p>
-        <p style="margin:5px 0;">&copy; ${new Date().getFullYear()} MVCon. All rights reserved.</p>
-      </div>
-    </div>
-  `;
+    console.log("✅ Email sent with QR code");
+  } catch (err) {
+    console.error("❌ Email sending failed:", err);
+  }
 
-  await sendEmail({
-    email: user.email,
-    subject: "🎫 Your MVCon Registration is Confirmed",
-    message,
-    attachments: [
-      {
-        filename: "qrcode.png",
-        path: qrFilePath, // local file path
-        cid: "qrcodeimg", // same cid used in <img src="cid:qrcodeimg">
-      },
-    ],
-  });
-
-  console.log("✅ Email sent with QR code");
-} catch (err) {
-  console.error("❌ Email sending failed:", err);
-}
-
-
+  /* ======================================================
+     ✅ FINAL RESPONSE
+  ====================================================== */
   res.status(200).json({
     success: true,
     message: "Payment verified & user registered",

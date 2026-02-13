@@ -6,6 +6,7 @@ const {
   updateUser,
   deleteUser,
   getUserHours,
+  resendRegistrationEmail,
 } = require('../controllers/user');
 
 const User = require('../models/User');
@@ -24,10 +25,8 @@ router
   .post(authorize('admin'), createUser);
 
 router
-  .route('/:id')
-  .get(authorize('admin', 'user'), getUser)  // Both admin and user can get single user
-  .put(authorize('admin'), updateUser)
-  .delete(authorize('admin'), deleteUser);
+  .route('/:id/resend-email')
+  .post(authorize('admin'), resendRegistrationEmail);
 
 
 module.exports = router;
