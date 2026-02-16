@@ -67,22 +67,22 @@ const userSchema = new mongoose.Schema({
   },
 
   registerNumber: {
-  type: String,
-  unique: true,
-  trim: true,
-},
-
-paymentInfo: {
-  orderId: String,
-  paymentId: String,
-  signature: String,
-  amount: Number,
-  status: {
     type: String,
-    enum: ["pending", "paid", "failed" , "free"],
-    default: "pending",
+    unique: true,
+    trim: true,
   },
-},
+
+  paymentInfo: {
+    orderId: String,
+    paymentId: String,
+    signature: String,
+    amount: Number,
+    status: {
+      type: String,
+      enum: ["pending", "paid", "failed", "free"],
+      default: "pending",
+    },
+  },
 
 
   // 🔹 QR Code fields
@@ -91,23 +91,27 @@ paymentInfo: {
     default: Date.now,
     required: true
   },
-qrCodeContent: {
-  type: String,
-  required: true
-},
-qrCodeImage: {
-  type: String,
-  default: ""
-},
+  qrCodeContent: {
+    type: String,
+    required: true
+  },
+  qrCodeImage: {
+    type: String,
+    default: ""
+  },
 
-certificateFile: {
-  type: String,
-  default: ""
-},
-certificateImage: {
-  type: String,
-  default: ""
-},
+  certificateFile: {
+    type: String,
+    default: ""
+  },
+  certificateImage: {
+    type: String,
+    default: ""
+  },
+  medicalCouncilNumber: {
+    type: String,
+    trim: true
+  },
 
   isVerified: {
     type: Boolean,

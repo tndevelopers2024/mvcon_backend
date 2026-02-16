@@ -13,7 +13,7 @@ const QRCode = require("qrcode");
 // @route   POST /api/v1/auth/register
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
-  const { name, email, phone, profession, city, state, designation } = req.body;
+  const { name, email, phone, profession, city, state, designation, medicalCouncilNumber } = req.body;
 
   // Check if user already exists
   const existingUser = await User.findOne({ email });
@@ -56,6 +56,7 @@ exports.register = asyncHandler(async (req, res, next) => {
       role: "user",
       password: rawPassword, // will be hashed when saving
       profileImage,
+      medicalCouncilNumber,
     },
   });
 });
@@ -143,7 +144,7 @@ exports.resendVerification = asyncHandler(async (req, res, next) => {
 
   // Send verification email
   const verificationUrl = `${req.protocol}://${req.get('host')}/api/v1/auth/verify-email/${user.emailVerificationToken}`;
-  
+
   const message = `
     <h1>Email Verification</h1>
     <p>Please verify your email by clicking the link below:</p>
@@ -218,7 +219,7 @@ exports.getMe = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/v1/auth/updatedetails
 // @access  Private
 exports.updateDetails = asyncHandler(async (req, res, next) => {
-  const { name, email, phone,country,currency, company } = req.body;
+  const { name, email, phone, country, currency, company } = req.body;
 
   const fieldsToUpdate = {
     name,
@@ -296,12 +297,12 @@ const sendTokenResponse = (user, statusCode, res) => {
     .status(statusCode)
     .cookie('token', token, options)
     .json({
- success: true,
- user: {
- id: user._id,
- name: user.name,
- email: user.email,
- },
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
       token,
       role: user.role
     });
