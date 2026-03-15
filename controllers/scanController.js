@@ -24,18 +24,9 @@ exports.scanQRCode = asyncHandler(async (req, res, next) => {
 
   try {
     user = await User.findById(qrData);
-
     if (user) {
       isValid = true;
       details = `QR code verified for ${user.name}`;
-
-      // ✅ Generate PDF & Image certificate if not already created
-      if (!user.certificateFile || !user.certificateImage) {
-        const certPaths = await generateCertificate(user);
-        user.certificateFile = certPaths.pdf;
-        user.certificateImage = certPaths.image;
-        await user.save();
-      }
     } else {
       details = "User not found for scanned QR";
     }
@@ -43,6 +34,20 @@ exports.scanQRCode = asyncHandler(async (req, res, next) => {
     details = "Invalid QR code format";
   }
 
+  // Handle certificate generation separately – don't let it break the main logic
+  if (isValid && user && (!user.certificateFile || !user.certificateImage)) {
+    try {
+      const certPaths = await generateCertificate(user);
+      user.certificateFile = certPaths.pdf;
+      user.certificateImage = certPaths.image;
+      await user.save();
+    } catch (certErr) {
+      console.error("Certificate generation failed:", certErr);
+      // We don't change details here so the user still sees success
+    }
+  }
+
+  // 1. Create the current scan log first
   await UserLog.create({
     user: user ? user._id : null,
     scannedBy: req.user.id,
@@ -51,9 +56,29 @@ exports.scanQRCode = asyncHandler(async (req, res, next) => {
     details,
   });
 
+  // 2. Fetch data based on the updated DB state
+  let scanCount = 0;
+  let lastScanTime = null;
+
+  if (isValid && user) {
+    // Current count including the one we just created
+    scanCount = await UserLog.countDocuments({ user: user._id, isValid: true });
+    
+    // Get the PREVIOUS valid log (the one created before the current one)
+    const previousLog = await UserLog.findOne({ user: user._id, isValid: true })
+      .sort({ timestamp: -1 })
+      .skip(1);
+      
+    if (previousLog) {
+      lastScanTime = previousLog.timestamp;
+    }
+  }
+
   res.status(200).json({
     success: true,
     isValid,
+    scanCount,
+    lastScanTime,
     user: isValid
       ? {
           id: user._id,

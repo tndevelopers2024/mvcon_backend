@@ -32,7 +32,7 @@ const userSchema = new mongoose.Schema({
   },
   profession: {
     type: String,
-    enum: ['PG', 'Delegates'],
+    enum: ['PG', 'Delegates', 'Organising committee', 'Faculty', 'Delegate', 'Volunteer', 'Pharma', 'Media', 'Visitor'],
     required: [true, 'Please select a profession'],
     trim: true,
     maxlength: [100, 'Profession name cannot be more than 100 characters']
@@ -111,6 +111,10 @@ const userSchema = new mongoose.Schema({
   medicalCouncilNumber: {
     type: String,
     trim: true
+  },
+  registeredByAdmin: {
+    type: Boolean,
+    default: false
   },
 
   isVerified: {

@@ -1,152 +1,148 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const fileUpload = require('express-fileupload');
-const path = require('path');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
-const rateLimit = require('express-rate-limit');
-const hpp = require('hpp');
-const colors = require('colors');
-const { Server } = require('socket.io');
+require("dotenv").config();
+const express = require("express");
+const http = require("http");
+const fileUpload = require("express-fileupload");
+const path = require("path");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const cookieParser = require("cookie-parser");
+const rateLimit = require("express-rate-limit");
+const hpp = require("hpp");
+const colors = require("colors");
+const { Server } = require("socket.io");
 
 // Custom modules
-const connectDB = require('./config/db');
-const errorHandler = require('./middleware/error');
-const sanitizeInput = require('./middleware/sanitizeInput');
+const connectDB = require("./config/db");
+const errorHandler = require("./middleware/error");
+const sanitizeInput = require("./middleware/sanitizeInput");
 
-// Route files
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/user');
-const notificationRoutes = require('./routes/notificationRoutes');
-const scanRoutes = require('./routes/scan');
-const paymentRoutes=require('./routes/paymentRoutes');
+
+// Routes
+const authRoutes = require("./routes/auth");
+const userRoutes = require("./routes/user");
+const notificationRoutes = require("./routes/notificationRoutes");
+const scanRoutes = require("./routes/scan");
+const paymentRoutes = require("./routes/paymentRoutes");
 const abstractRoutes = require("./routes/abstractRoutes");
+const adminRegistrationRoutes = require('./routes/adminRegistrationRoutes');
 
-// Connect to MongoDB
+// DB
 connectDB();
 
-// Init express app
 const app = express();
 
-// Create HTTP server for WebSocket
+// Trust proxy (necessary for express-rate-limit behind Nginx/Cloudflare)
+app.set("trust proxy", true);
+
 const httpServer = http.createServer(app);
 
-// Initialize Socket.IO server
-const io = new Server(httpServer, {
-  cors: {
-    origin: [
-      'http://localhost:9002',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://www.mvcon.in',
-      'https://mvcon.in',
-      'https://mvcon.space'
-    ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true, // If using cookies/auth
+//
+// ✅ SINGLE GLOBAL CORS (NO DUPLICATES EVER)
+//
+const cors = require("cors");
+
+const allowedOrigins = [
+  "https://mvcon.in",
+  "https://www.mvcon.in",
+  "https://mvcon.space",
+  "https://www.mvcon.space",
+  "http://localhost:3000",
+  "http://localhost:5173"
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    // Split potential multiple origins (sometimes sent by reverse proxies)
+    const origins = origin.split(',').map(o => o.trim());
+    const isAllowed = origins.some(o => allowedOrigins.includes(o));
+    
+    if (isAllowed) {
+      // Return the first allowed origin if multiple were sent
+      const primaryOrigin = origins.find(o => allowedOrigins.includes(o));
+      callback(null, primaryOrigin);
+    } else {
+      console.warn(`CORS blocked for origin: ${origin}`);
+      callback(null, false);
+    }
   },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: [
+    "Origin",
+    "X-Requested-With",
+    "Content-Type",
+    "Accept",
+    "Authorization"
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+// Handle preflight for all routes
+app.options("/:any", cors(corsOptions));
+//
+// ✅ SOCKET.IO (NO HTTP CORS HEADERS)
+//
+const io = new Server(httpServer, {
+  transports: ["websocket"], // prevent HTTP polling CORS
 });
 
-app.use(
-  fileUpload({
-    createParentPath: true, // auto create folder if not exists
-  })
-);
+app.set("io", io);
 
-// Attach io to app
-app.set('io', io);
-
-// Handle WebSocket connections
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   console.log(`🟢 Socket connected: ${socket.id}`);
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     console.log(`🔴 Socket disconnected: ${socket.id}`);
   });
 });
 
-// ========== CORS Configuration ========== //
-const allowedOrigins = [
-  'http://localhost:9002',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://www.mvcon.in',
-  'https://mvcon.in',
-  'https://mvcon.space',   // ✅ backend domain
-];
-
+//
+// Middleware
+//
 app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true, // Allow cookies/auth
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+  fileUpload({
+    createParentPath: true,
   })
 );
 
-// Middleware
-app.use(express.json({ limit: '2gb' }));
-app.use(express.urlencoded({ extended: true, limit: '2gb' }));
+app.use(express.json({ limit: "2gb" }));
+app.use(express.urlencoded({ extended: true, limit: "2gb" }));
 app.use(cookieParser());
 
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("dev"));
 }
 
 app.use(sanitizeInput);
 
-// ✅ Helmet fixed (allow images + disable strict CSP)
 app.use(
   helmet({
-    crossOriginResourcePolicy: false, // allow images from other origins
-    contentSecurityPolicy: false, // disable CSP (or configure if needed)
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: false,
   })
 );
 
 app.use(hpp());
 
-// Rate limiter
 const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
+  windowMs: 60 * 1000,
   max: 500,
-  message: {
-    success: false,
-    error: 'Too many requests, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 app.use(limiter);
 
-// ✅ Static file serving
-// Profile images (can use normal caching)
+//
+// ✅ STATIC FILES (NO CORS HEADERS HERE)
+//
 app.use(
-  '/uploads/profile',
-  (req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  },
-  express.static(path.join(__dirname, 'uploads/profile'))
+  "/uploads/profile",
+  express.static(path.join(__dirname, "uploads/profile"))
 );
 
-// QR codes (disable caching, always return 200 OK)
 app.use(
-  '/uploads/qrcodes',
-  (req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  },
-  express.static(path.join(__dirname, 'uploads/qrcodes'), {
+  "/uploads/qrcodes",
+  express.static(path.join(__dirname, "uploads/qrcodes"), {
     etag: false,
     lastModified: false,
     cacheControl: false,
@@ -154,38 +150,33 @@ app.use(
   })
 );
 
-// Fallback for other uploads
-app.use(
-  '/uploads',
-  (req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    next();
-  },
-  express.static(path.join(__dirname, 'uploads'))
-);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// API Routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/notifications', notificationRoutes);
-app.use('/api/v1/scan', scanRoutes);
-app.use('/api/v1/payments', paymentRoutes);
+//
+// Routes
+//
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/scan", scanRoutes);
+app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/abstracts", abstractRoutes);
+app.use('/api/v1/admin-registration', adminRegistrationRoutes);
 
-// Global error handler
 app.use(errorHandler);
 
-// Server listen
-const PORT = process.env.PORT || 5000;
+//
+// Server
+//
+const PORT = process.env.PORT || 5001;
+
 httpServer.listen(PORT, () => {
   console.log(
-    `🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold
+    `🚀 Server running in ${process.env.NODE_ENV} on ${PORT}`.yellow.bold
   );
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
+process.on("unhandledRejection", (err) => {
   console.error(`❌ Unhandled Rejection: ${err.message}`.red);
   httpServer.close(() => process.exit(1));
 });
