@@ -25,6 +25,12 @@ router
   .post(authorize('admin'), createUser);
 
 router
+  .route('/:id')
+  .get(authorize('admin'), getUser)
+  .put(authorize('admin'), updateUser)
+  .delete(authorize('admin'), deleteUser);
+
+router
   .route('/:id/resend-email')
   .post(authorize('admin'), resendRegistrationEmail);
 
